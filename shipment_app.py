@@ -39,7 +39,7 @@ with st.expander("View table data:"):
 # --- Chart (Altair) ---
 chart = (
     alt.Chart(plot_df)
-    .mark_bar()
+    .mark_bar(color="#D41919")
     .encode(
         x=alt.X("Ingredient:N", sort="-y", title="Ingredient"),
         y=alt.Y("Total monthly shipment:Q", title="Total per month"),
@@ -55,4 +55,5 @@ chart = (
     .properties(height=420)
 )
 st.altair_chart(chart, use_container_width=True)
+
 
