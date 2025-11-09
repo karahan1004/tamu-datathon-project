@@ -1,13 +1,15 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
+import re
 
 # PAGE CONFIGURATION
 st.set_page_config(layout="wide", page_title="Ingredient Demand Forecast Viewer")
 
 # --- Configuration ---
 # Updated to match the name of the file created by the forecasting script
-CSV_FILEPATH = r"C:\Users\emily\Documents\Datathon\tamu-datathon-project\streamlit_app\pages\Predictive_Analysis\ingredient_forecast_with_constraints.csv"
+CSV_FILEPATH = r"C:\Users\emily\Documents\Datathon\tamu-datathon-project\streamlit_app\pages\Predictive_Analysis\ingredient_forecast_with_constraints.csv" 
+# change file path
 # Assuming 6 historical data points (May through October 2025)
 HISTORICAL_MONTHS = 6 
 
@@ -58,7 +60,7 @@ def create_trend_chart(df, ingredient_name, unit):
     
     # Base chart setup
     base = alt.Chart(df_filtered).encode(
-        x=alt.X('ds', title='Date', axis=alt.Axis(format="%b %Y")),
+        x=alt.X('ds', title='Date', axis=alt.Axis(format="%b", tickCount="month")),
         y=alt.Y('yhat', title=f'Forecasted Quantity', scale=alt.Scale(zero=False)),
         tooltip=[
             alt.Tooltip('ds', title='Date', format='%Y-%m-%d'),
@@ -78,14 +80,7 @@ def create_trend_chart(df, ingredient_name, unit):
                         legend=alt.Legend(title="Forecast Period")),
         opacity=alt.value(1)
     )
-    # Line showing the trend, colored by period (Historical vs Future)
-#    line = base.mark_line(point=True).encode(
-#        color=alt.Color('period', 
-#                        scale=alt.Scale(domain=['Historical Proxy', 'Future Forecast'], 
-#                                        range=['#2563eb', '#ef4444']), # Blue for history, Red for future
-#                        legend=alt.Legend(title="Forecast Period")),
-#        strokeWidth=alt.value(3)
-#    )
+
     
     # Add a rule/line for the transition point (end of historical data)
     transition_df = df_filtered[df_filtered['period'] == 'Future Forecast']
@@ -104,46 +99,8 @@ def create_trend_chart(df, ingredient_name, unit):
         chart = line
 
     return chart.properties(
-        title=f'Demand Forecast Trend: {ingredient_name} (in {unit})'
+        title=f'Demand Forecast Trend: {ingredient_name}'
     ).interactive()
-
-def create_constraint_chart(df, ingredient_name, unit):
-    """Creates a bar chart comparing monthly supply vs. forecasted demand for future months."""
-    
-    # Filter for future months only and the selected ingredient
-    df_filtered = df[(df['ingredient'] == ingredient_name) & (df['period'] == 'Future Forecast')].sort_values('ds')
-    
-    if df_filtered.empty:
-        return None
-
-    # Prepare data for comparison chart (Supply vs Demand)
-    comparison_df = df_filtered[['ds', 'yhat', 'supply']].copy()
-    comparison_df = comparison_df.melt(
-        id_vars='ds', 
-        value_vars=['yhat', 'supply'],
-        var_name='Type', 
-        value_name='Quantity'
-    ).rename(columns={'ds': 'Date'})
-    
-    # Altair chart for Supply vs Demand
-    bar_chart = alt.Chart(comparison_df).mark_bar().encode(
-        # Group bars by date
-        x=alt.X('Date', axis=alt.Axis(format="%b %Y"), title="Forecast Month"),
-        # Separate bars by Type (Forecast or Supply)
-        column=alt.Column('Type', header=alt.Header(titleOrient="bottom", labelOrient="bottom")),
-        y=alt.Y('Quantity', title=f'Quantity ({unit})'),
-        color=alt.Color('Type', scale=alt.Scale(domain=['yhat', 'supply'], range=['#f97316', '#10b981']), 
-                        legend=alt.Legend(title="Type", labelExpr="datum.label == 'yhat' ? 'Forecasted Demand' : 'Monthly Supply'")),
-        tooltip=[
-            alt.Tooltip('Date', format='%Y-%m-%d'),
-            alt.Tooltip('Quantity', format=',.0f'),
-            alt.Tooltip('Type', title='Metric')
-        ]
-    ).properties(
-        title=f'Supply vs. Demand Comparison ({ingredient_name})'
-    ).interactive()
-    
-    return bar_chart
 
 
 def calculate_metrics(df_filtered):
@@ -184,7 +141,7 @@ if __name__ == "__main__":
     df = load_data()
 
     st.title("🍜 Ingredient Demand Forecast & Constraint Analysis")
-    st.markdown("Use this dashboard to check future demand for ingredients and see if your **current shipment schedule is sufficient to cover it.")
+    st.markdown("Use this dashboard to check future demand for ingredients and see if your current shipment schedule is sufficient to cover it.")
 
     if not df.empty:
         # Ingredient Selection (The Dropdown) 
@@ -206,7 +163,8 @@ if __name__ == "__main__":
         if selected_ingredient and metrics:
             
             # --- Section 1: Forecasting Trend Chart ---
-            st.subheader(f"1. Demand Trend for {selected_ingredient}")
+            clean_ingredient = re.sub(r"\s*\(.*?\)", "", selected_ingredient).strip().title()
+            st.subheader(f"1. Demand Trend for {clean_ingredient}")
             st.markdown(f"Shows the monthly usage trend, standardized to **{unit}** for supply comparison.")
             trend_chart = create_trend_chart(df, selected_ingredient, unit)
             st.altair_chart(trend_chart, use_container_width=True)
@@ -222,7 +180,7 @@ if __name__ == "__main__":
             
             # Historical Average
             col1.metric(
-                label="Historical Proxy Avg.", 
+                label="Avg. Past Orders", 
                 value=f"{metrics.get('Historical Average', 0):,.0f} {unit}"
             )
 
@@ -250,17 +208,6 @@ if __name__ == "__main__":
             # Metrics Row 2: Action Required
             st.markdown("#### **Action Required**")
             st.markdown(f"**{metrics.get('Action Required', 'N/A')}**")
-
-            # --- Section 3: Constraint Comparison Chart ---
-            st.markdown("---")
-            st.subheader("3. Future Supply vs. Forecasted Demand")
-            st.markdown("This bar chart highlights months where demand (orange) exceeds your current supply (green).")
-            
-            constraint_chart = create_constraint_chart(df, selected_ingredient, unit)
-            if constraint_chart:
-                st.altair_chart(constraint_chart, use_container_width=True)
-            else:
-                st.info("No future forecast data available for constraint comparison.")
 
 
             # --- Section 4: Raw Data ---
