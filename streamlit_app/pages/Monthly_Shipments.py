@@ -7,14 +7,11 @@ import altair as alt
 
 st.set_page_config(page_title="Monthly Matrix • Data 1 & Data 2", layout="wide")
 
-# ---------- Theme / config ----------
 PRIMARY = "#cd1b1b"
 
-# Data 1 canonical groups (stacked bar segments)
 D1_GROUPS = ["All Day Menu", "Lunch Menu", "Open Food", "Gift Card", "Signature Drinks"]
 D1_COLORS = ["#7f1d1d", "#b91c1c", "#ef4444", "#f97316", "#f59e0b"]
 
-# Data 2 known categories (from your list)
 D2_CATEGORIES = [
     "Additional", "Appetizer", "Bingsu", "Combo Items", "Dessert", "Drink",
     "Fried Chicken", "Fried Rice", "Fruit Tea", "Gift Card", "Jas-Lemonade",
@@ -23,7 +20,6 @@ D2_CATEGORIES = [
     "Tossed Rice Noodle", "Wonton"
 ]
 
-# Resolve ../data relative to this page
 DATA_DIR = (Path(__file__).parent.parent / "data").resolve()
 MONTH_FILE_RE = re.compile(r"^([A-Za-z]+)_Data_Matrix\.(xlsx|xls|csv)$", re.I)
 
@@ -41,12 +37,11 @@ def discover_month_files() -> dict[str, Path]:
         mapping[month_name] = p
     return dict(sorted(mapping.items(), key=lambda kv: _month_key(kv[0])))
 
-# ---------- Loaders ----------
 @st.cache_data(show_spinner=False)
 def load_data1(path: Path, month_label: str) -> pd.DataFrame:
     """Read sheet 'data 1' with columns ['Group', 'Amount']."""
     if path.suffix.lower() == ".csv":
-        df = pd.read_csv(path)  # CSV would need to already be data 1
+        df = pd.read_csv(path) 
     else:
         df = pd.read_excel(path, sheet_name="data 1", engine="openpyxl")
     df.columns = [c.strip() for c in df.columns]
@@ -92,12 +87,8 @@ def load_data2(path: Path, month_label: str) -> pd.DataFrame:
     out["Month"] = month_label
     return out
 
-# ---------- UI ----------
 tabs = st.tabs(["📊 Data 1 — Stacked Revenue", "🥧 Data 2 — Category Pies"])
 
-# =========================
-# === TAB 1: DATA 1 UI ===
-# =========================
 with tabs[0]:
     st.markdown(
         f"""
@@ -114,7 +105,6 @@ with tabs[0]:
         st.stop()
     months_all = list(month_to_path.keys())
 
-    # Controls inside the tab
     st.caption("Choose the month range for Data 1:")
     start_m, end_m = st.select_slider(
         "Month Range", options=months_all,
@@ -132,11 +122,9 @@ with tabs[0]:
             d1_groups = D1_GROUPS[:]
     color_scale = alt.Scale(domain=d1_groups, range=D1_COLORS[:len(d1_groups)])
 
-    # Load & combine
     frames1 = [load_data1(month_to_path[m], m) for m in months_d1]
     d1 = pd.concat(frames1, ignore_index=True) if frames1 else pd.DataFrame(columns=["Group","Amount","Month"])
 
-    # Ensure each selected month has all groups (missing -> 0)
     pivot = (
         d1.groupby(["Month", "Group"], as_index=False)["Amount"].sum()
           .pivot(index="Month", columns="Group", values="Amount")
@@ -172,9 +160,6 @@ with tabs[0]:
             use_container_width=True
         )
 
-# =========================
-# === TAB 2: DATA 2 UI ===
-# =========================
 with tabs[1]:
     st.markdown(
         f"""
@@ -197,26 +182,22 @@ with tabs[1]:
     with left:
         st.caption("Choose months and categories for Data 2:")
 
-        # Month selector (multiselect)
         m_sel = st.multiselect("Months", months_all, default=months_all)
         if not m_sel:
             st.info("Select at least one month.")
             st.stop()
 
-        # Category selector with “Use all” toggle
         use_all = st.checkbox("Use all categories", value=True, help="Turn off to pick a subset.")
         if use_all:
-            cats_selected = D2_CATEGORIES[:]           # all
+            cats_selected = D2_CATEGORIES[:]           
         else:
-            # Start empty so you can truly select none if desired
             cats_selected = st.multiselect(
                 "Categories (scroll + search)",
                 options=D2_CATEGORIES,
-                default=[],                             # <-- key fix: don't default to all
+                default=[],
                 help="Scroll or search to select one or more categories."
             )
 
-        # ---- Single legend UNDER the controls (only here) ----
         if cats_selected:
             color_scale = alt.Scale(domain=cats_selected, scheme="tableau10")
             legend_df = pd.DataFrame({"Category": cats_selected})
@@ -232,39 +213,30 @@ with tabs[1]:
             st.markdown("**Legend**")
             st.altair_chart(legend_chart, use_container_width=False)
         else:
-            # If none picked, still define a color_scale so downstream code can reference it.
             color_scale = alt.Scale(domain=[], scheme="tableau10")
 
-        # Layout for pies
         per_row = 2
 
     with right:
-        # Load & filter data
         frames2 = [load_data2(month_to_path[m], m) for m in m_sel]
         d2 = pd.concat(frames2, ignore_index=True) if frames2 else pd.DataFrame(columns=["Category","Count","Amount","Month"])
 
-        # Normalize categories
         d2["Category"] = d2["Category"].astype("string").fillna("").str.strip()
 
-        # Apply category filter
         if cats_selected:
             d2 = d2[d2["Category"].isin(cats_selected)]
         else:
-            d2 = d2.iloc[0:0]  # empty on purpose if user chose none
+            d2 = d2.iloc[0:0] 
 
-        # Remove zero-amount slices
         d2 = d2[d2["Amount"] > 0]
 
         if d2.empty:
             st.info("No data for the chosen filters.")
         else:
-            # Aggregate per month/category
             agg = (
                 d2.groupby(["Month", "Category"], as_index=False)[["Amount", "Count"]]
                   .sum()
             )
-
-            # Render pies 2 per row with spacing; no labels on slices (tooltips only)
             for i in range(0, len(m_sel), per_row):
                 row = st.columns(per_row, gap="large")
                 for col, month in zip(row, m_sel[i:i+per_row]):
@@ -277,7 +249,7 @@ with tabs[1]:
 
                     pie = (
                         alt.Chart(dfm, title=title)
-                        .mark_arc(outerRadius=110, innerRadius=0)  # no labels on slices
+                        .mark_arc(outerRadius=110, innerRadius=0)
                         .encode(
                             theta=alt.Theta("Amount:Q", stack=True, title=None),
                             color=alt.Color("Category:N", scale=color_scale, legend=None),
