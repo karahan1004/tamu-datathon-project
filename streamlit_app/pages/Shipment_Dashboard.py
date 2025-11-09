@@ -9,7 +9,7 @@ st.title("📦 Monthly Shipments Dashboard")
 st.caption("Bars are all displays of monthly frequency per item!")
 
 # --- Load data ---
-CSV_PATH = Path("../Data/MSY Data - Shipment.csv")  # adjust if needed
+CSV_PATH = Path("../data/MSY Data - Shipment.csv")  # adjust if needed
 df = pd.read_csv(CSV_PATH)
 
 # --- Clean + compute ---
